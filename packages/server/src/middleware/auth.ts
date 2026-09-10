@@ -7,6 +7,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { User, IUser } from '../models';
+import { verifyAuthToken } from '../utils';
 
 // Extend express-session to include userId
 declare module 'express-session' {
@@ -26,8 +27,12 @@ declare global {
 
 /**
  * Auth guard middleware.
- * Looks up session.userId, loads the user, and attaches to req.user.
- * Returns 401 if no valid session or user not found.
+ * Supports dual authentication:
+ *   1. Cookie-based session (req.session.userId)
+ *   2. Header-based Bearer token (Authorization: Bearer <token> or X-Auth-Token)
+ * 
+ * Attaches authenticated user to req.user.
+ * Returns 401 if neither is valid or user not found.
  */
 export async function requireAuth(
   req: Request,
@@ -35,7 +40,21 @@ export async function requireAuth(
   next: NextFunction
 ): Promise<void> {
   try {
-    const userId = req.session?.userId;
+    let userId = req.session?.userId;
+
+    // If no session cookie, check Authorization: Bearer <token> or X-Auth-Token header
+    if (!userId) {
+      const authHeader = req.headers.authorization || (req.headers['x-auth-token'] as string);
+      if (authHeader) {
+        const rawToken = authHeader.startsWith('Bearer ')
+          ? authHeader.substring(7).trim()
+          : authHeader.trim();
+        const verifiedId = verifyAuthToken(rawToken);
+        if (verifiedId) {
+          userId = verifiedId;
+        }
+      }
+    }
 
     if (!userId) {
       res.status(401).json({
@@ -50,8 +69,10 @@ export async function requireAuth(
     const user = await User.findById(userId).select('-passwordHash');
 
     if (!user) {
-      // Session references a deleted user — destroy the stale session
-      req.session.destroy(() => {});
+      // Session or token references a nonexistent/deleted user
+      if (req.session) {
+        req.session.destroy(() => {});
+      }
       res.status(401).json({
         error: {
           code: 'UNAUTHORIZED',
@@ -62,6 +83,9 @@ export async function requireAuth(
     }
 
     req.user = user;
+    if (req.session && !req.session.userId) {
+      req.session.userId = user._id.toString();
+    }
     next();
   } catch (err) {
     next(err);

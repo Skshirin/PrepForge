@@ -12,6 +12,7 @@ import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { User } from '../models';
 import { requireAuth } from '../middleware';
+import { createAuthToken } from '../utils';
 
 const router = Router();
 
@@ -70,8 +71,15 @@ router.post(
       const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
       const user = await User.create({ email, passwordHash });
 
-      // Start session
-      req.session.userId = user._id.toString();
+      // Start session & save explicitly
+      if (req.session) {
+        req.session.userId = user._id.toString();
+        await new Promise<void>((resolve) => {
+          req.session.save ? req.session.save(() => resolve()) : resolve();
+        });
+      }
+
+      const token = createAuthToken(user._id.toString());
 
       res.status(201).json({
         user: {
@@ -79,6 +87,7 @@ router.post(
           email: user.email,
           createdAt: user.createdAt,
         },
+        token,
       });
     } catch (err) {
       next(err);
@@ -130,8 +139,15 @@ router.post(
         return;
       }
 
-      // Start session
-      req.session.userId = user._id.toString();
+      // Start session & save explicitly
+      if (req.session) {
+        req.session.userId = user._id.toString();
+        await new Promise<void>((resolve) => {
+          req.session.save ? req.session.save(() => resolve()) : resolve();
+        });
+      }
+
+      const token = createAuthToken(user._id.toString());
 
       res.json({
         user: {
@@ -139,6 +155,7 @@ router.post(
           email: user.email,
           createdAt: user.createdAt,
         },
+        token,
       });
     } catch (err) {
       next(err);

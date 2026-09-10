@@ -48,10 +48,9 @@ export default function RegisterPage() {
     setIsSubmitting(true);
     try {
       await register(email.trim(), password);
-      router.push('/dashboard');
+      router.replace('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Registration failed. Please try again.');
-    } finally {
       setIsSubmitting(false);
     }
   };

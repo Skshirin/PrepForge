@@ -40,10 +40,9 @@ function LoginForm() {
     try {
       await login(email.trim(), password);
       const redirect = searchParams?.get('redirect') || '/dashboard';
-      router.push(redirect);
+      router.replace(redirect);
     } catch (err: any) {
       setError(err.message || 'Failed to sign in. Please check your credentials.');
-    } finally {
       setIsSubmitting(false);
     }
   };

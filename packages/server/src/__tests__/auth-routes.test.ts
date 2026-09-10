@@ -71,6 +71,39 @@ describe('Auth Routes', () => {
       expect(res.status).toBe(401);
       expect(res.body.error).toHaveProperty('code', 'UNAUTHORIZED');
     });
+
+    it('returns user when valid Bearer token is provided', async () => {
+      const mockUser = {
+        _id: '507f1f77bcf86cd799439011',
+        email: 'tokenuser@example.com',
+        createdAt: new Date(),
+      };
+
+      jest.spyOn(User, 'findById').mockReturnValue({
+        select: jest.fn().mockResolvedValue(mockUser),
+      } as any);
+
+      const { createAuthToken } = require('../utils');
+      const token = createAuthToken(mockUser._id);
+
+      const res = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.user).toHaveProperty('email', 'tokenuser@example.com');
+
+      jest.restoreAllMocks();
+    });
+
+    it('returns 401 when invalid Bearer token is provided', async () => {
+      const res = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', 'Bearer invalid.tampered.token');
+
+      expect(res.status).toBe(401);
+      expect(res.body.error).toHaveProperty('code', 'UNAUTHORIZED');
+    });
   });
 
   describe('POST /api/auth/logout', () => {

@@ -22,6 +22,28 @@ export class ApiError extends Error {
   }
 }
 
+export const TOKEN_STORAGE_KEY = 'prepforge_auth_token';
+
+export function getStoredToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredToken(token: string | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (token) {
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    } else {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+    }
+  } catch {}
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 export function buildUrl(endpoint: string): string {
@@ -46,6 +68,12 @@ export async function apiRequest<T = any>(
     ...(options.headers as Record<string, string>),
   };
 
+  // Attach Bearer token if present in localStorage
+  const token = getStoredToken();
+  if (token && !headers['Authorization']) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   if (
     options.body &&
     typeof options.body === 'string' &&
@@ -57,11 +85,12 @@ export async function apiRequest<T = any>(
   const response = await fetch(url, {
     ...options,
     headers,
-    credentials: 'include', // Always send session cookie
+    credentials: 'include', // Always send session cookie when supported
   });
 
   // Handle 401 Unauthorized
   if (response.status === 401) {
+    setStoredToken(null);
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
       if (pathname !== '/login' && pathname !== '/register') {
