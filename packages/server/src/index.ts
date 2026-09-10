@@ -82,6 +82,9 @@ app.use(
   })
 );
 
+let lastDbError: string | null = null;
+let reconnectTimer: NodeJS.Timeout | null = null;
+
 // ---- Health Check Endpoint -------------------------------------------------
 
 app.get('/api/health', (_req, res) => {
@@ -90,14 +93,27 @@ app.get('/api/health', (_req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     dbConnected: mongoose.connection.readyState === 1,
+    dbError: lastDbError,
     environment: process.env.NODE_ENV || 'development',
   });
 });
 
+// Middleware to check database readiness for database-dependent routes
+export function requireDatabase(_req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (isTest || mongoose.connection.readyState === 1) {
+    return next();
+  }
+  return res.status(503).json({
+    error: 'Database is currently unavailable. Please verify MONGODB_URI credentials.',
+    details: lastDbError,
+    dbConnected: false,
+  });
+}
+
 // ---- API Routes ------------------------------------------------------------
 
-app.use('/api/auth', authRouter);
-app.use('/api/kits', kitRouter);
+app.use('/api/auth', requireDatabase, authRouter);
+app.use('/api/kits', requireDatabase, kitRouter);
 app.use('/api/generation', generationRouter);
 
 // 404 Handler for undefined API routes
@@ -112,14 +128,36 @@ app.use(globalErrorHandler);
 // ---- Server Lifecycle ------------------------------------------------------
 
 export async function connectDatabase(uri = MONGODB_URI): Promise<boolean> {
-  if (mongoose.connection.readyState === 1) return true;
+  if (mongoose.connection.readyState === 1) {
+    lastDbError = null;
+    return true;
+  }
   try {
-    await mongoose.connect(uri);
+    await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 5000,
+    });
+    lastDbError = null;
     console.log('[MongoDB] Connected successfully to', uri.split('@').pop() || uri);
+    if (reconnectTimer) {
+      clearInterval(reconnectTimer);
+      reconnectTimer = null;
+    }
     return true;
   } catch (err: any) {
-    console.error('[MongoDB] Connection error (bad auth or unreachable):', err.message);
-    console.error('[MongoDB] Hint: Check MONGODB_URI credentials. URL-encode special chars in password (e.g. @ -> %40). Whitelist 0.0.0.0/0 in Atlas.');
+    lastDbError = err.message || String(err);
+    console.error('[MongoDB] Connection error (bad auth or unreachable):', lastDbError);
+    console.error('[MongoDB] Hint: In MongoDB Atlas -> Security -> Database Access, verify the username and reset/set the password. Whitelist 0.0.0.0/0 in Network Access.');
+    
+    // Auto-retry in background every 10 seconds
+    if (!reconnectTimer && !isTest) {
+      reconnectTimer = setInterval(() => {
+        if (mongoose.connection.readyState !== 1) {
+          console.log('[MongoDB] Retrying database connection...');
+          connectDatabase(uri).catch(() => {});
+        }
+      }, 10000);
+      reconnectTimer.unref();
+    }
     return false;
   }
 }
