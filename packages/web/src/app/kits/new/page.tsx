@@ -89,6 +89,98 @@ export default function NewKitPage() {
     }
   };
 
+  // Robust RFC 4180 CSV parser supporting quotes, escaped quotes, and commas within fields
+  const parseCSV = (text: string): Array<{ jd: string; company_url?: string; days?: number }> => {
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    let currentField = '';
+    let insideQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+
+      if (char === '"') {
+        if (insideQuotes && nextChar === '"') {
+          currentField += '"';
+          i++; // Skip escaped quote
+        } else {
+          insideQuotes = !insideQuotes;
+        }
+      } else if (char === ',' && !insideQuotes) {
+        currentRow.push(currentField.trim());
+        currentField = '';
+      } else if ((char === '\r' || char === '\n') && !insideQuotes) {
+        if (char === '\r' && nextChar === '\n') {
+          i++;
+        }
+        currentRow.push(currentField.trim());
+        currentField = '';
+        if (currentRow.some((field) => field.length > 0)) {
+          rows.push(currentRow);
+        }
+        currentRow = [];
+      } else {
+        currentField += char;
+      }
+    }
+
+    if (currentField.length > 0 || currentRow.length > 0) {
+      currentRow.push(currentField.trim());
+      if (currentRow.some((field) => field.length > 0)) {
+        rows.push(currentRow);
+      }
+    }
+
+    if (rows.length < 2) {
+      throw new Error('CSV must contain a header row and at least one entry.');
+    }
+
+    const headers = rows[0].map((h) => h.replace(/^["']|["']$/g, '').trim().toLowerCase());
+    const jdIdx = headers.findIndex((h) =>
+      ['jd', 'job_description', 'jobdescription', 'description'].includes(h)
+    );
+    const compIdx = headers.findIndex((h) =>
+      ['company_url', 'companyurl', 'url', 'website', 'company_website'].includes(h)
+    );
+    const daysIdx = headers.findIndex((h) =>
+      ['days', 'days_available', 'duration'].includes(h)
+    );
+
+    if (jdIdx === -1) {
+      throw new Error('CSV must have a "jd" (or "job_description") column header.');
+    }
+
+    const entries: Array<{ jd: string; company_url?: string; days?: number }> = [];
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const rawJd = (row[jdIdx] || '').replace(/^["']|["']$/g, '').trim();
+      if (!rawJd) continue;
+
+      let rawComp = compIdx !== -1 ? (row[compIdx] || '').replace(/^["']|["']$/g, '').trim() : '';
+      if (rawComp && !/^https?:\/\//i.test(rawComp)) {
+        rawComp = `https://${rawComp}`;
+      }
+      try {
+        if (rawComp) new URL(rawComp);
+      } catch {
+        rawComp = '';
+      }
+
+      const rawDays = daysIdx !== -1 ? parseInt(row[daysIdx], 10) : 5;
+      const days = !isNaN(rawDays) && rawDays >= 1 && rawDays <= 60 ? rawDays : 5;
+
+      entries.push({
+        jd: rawJd,
+        company_url: rawComp,
+        days,
+      });
+    }
+
+    return entries;
+  };
+
   // Parse bulk JSON or CSV
   const handleBulkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGeneralError(null);
@@ -104,36 +196,51 @@ export default function NewKitPage() {
 
       try {
         if (file.name.endsWith('.json')) {
-          const parsed = JSON.parse(content);
+          let parsed = JSON.parse(content);
           if (!Array.isArray(parsed)) {
-            throw new Error('JSON file must contain an array of objects.');
+            if (Array.isArray(parsed.cases)) {
+              parsed = parsed.cases;
+            } else if (Array.isArray(parsed.kits)) {
+              parsed = parsed.kits;
+            } else {
+              throw new Error('JSON file must contain an array of kit objects.');
+            }
           }
-          setBulkEntries(parsed);
+
+          const entries = parsed
+            .map((item: any) => {
+              const rawJd = item.jd || item.job_description || item.description || '';
+              let rawComp = item.company_url || item.companyUrl || item.url || '';
+              if (rawComp && !/^https?:\/\//i.test(rawComp)) {
+                rawComp = `https://${rawComp}`;
+              }
+              try {
+                if (rawComp) new URL(rawComp);
+              } catch {
+                rawComp = '';
+              }
+              const rawDays = parseInt(item.days || item.days_available, 10);
+              const days = !isNaN(rawDays) && rawDays >= 1 && rawDays <= 60 ? rawDays : 5;
+
+              return {
+                jd: typeof rawJd === 'string' ? rawJd.trim() : String(rawJd),
+                company_url: rawComp,
+                days,
+              };
+            })
+            .filter((e: any) => Boolean(e.jd && e.jd.length >= 10));
+
+          if (entries.length === 0) {
+            throw new Error('No valid kit entries found in JSON file (each entry requires a "jd" of at least 10 characters).');
+          }
+
+          setBulkEntries(entries);
         } else if (file.name.endsWith('.csv')) {
-          // Parse CSV: headers jd,company_url,days
-          const lines = content.split('\n').map((l) => l.trim()).filter(Boolean);
-          if (lines.length < 2) {
-            throw new Error('CSV must contain a header line and at least one entry.');
+          const entries = parseCSV(content);
+          if (entries.length === 0) {
+            throw new Error('No valid kit entries found in CSV file.');
           }
-          const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
-          const jdIdx = headers.indexOf('jd');
-          const compIdx = headers.indexOf('company_url');
-          const daysIdx = headers.indexOf('days');
-
-          if (jdIdx === -1) {
-            throw new Error('CSV must have a "jd" column header.');
-          }
-
-          const parsedEntries = lines.slice(1).map((line) => {
-            const cols = line.split(',');
-            return {
-              jd: cols[jdIdx] || '',
-              company_url: compIdx !== -1 ? cols[compIdx] : '',
-              days: daysIdx !== -1 ? parseInt(cols[daysIdx], 10) || 5 : 5,
-            };
-          });
-
-          setBulkEntries(parsedEntries);
+          setBulkEntries(entries);
         } else {
           throw new Error('Unsupported file format. Please upload a .json or .csv file.');
         }
@@ -155,20 +262,29 @@ export default function NewKitPage() {
     setIsSubmitting(true);
     setGeneralError(null);
     let createdFirstId: string | null = null;
+    let failedCount = 0;
 
     try {
       for (let i = 0; i < bulkEntries.length; i++) {
         const item = bulkEntries[i];
         setBulkProgress(`Queuing kit ${i + 1} of ${bulkEntries.length}...`);
 
-        const res = await api.post<{ kitId: string; jobId: string }>('/api/kits', {
-          jd: item.jd,
-          companyUrl: item.company_url || '',
-          days: item.days || 5,
-        });
+        try {
+          const res = await api.post<{ kitId: string; jobId: string }>('/api/kits', {
+            jd: item.jd,
+            companyUrl: item.company_url || '',
+            days: item.days || 5,
+          });
 
-        if (i === 0) {
-          createdFirstId = res.kitId;
+          if (!createdFirstId) {
+            createdFirstId = res.kitId;
+          }
+        } catch (itemErr: any) {
+          console.error(`Error queuing kit ${i + 1}:`, itemErr);
+          failedCount++;
+          if (failedCount === bulkEntries.length) {
+            throw itemErr;
+          }
         }
       }
 

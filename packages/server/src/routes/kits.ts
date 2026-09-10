@@ -18,7 +18,24 @@ kitRouter.use(requireAuth);
 
 const createKitSchema = z.object({
   jd: z.string().min(10, 'Job description must be at least 10 characters'),
-  companyUrl: z.string().url('Invalid company URL').or(z.literal('')).optional().default(''),
+  companyUrl: z
+    .string()
+    .optional()
+    .default('')
+    .transform((val) => {
+      const trimmed = (val || '').trim();
+      if (!trimmed) return '';
+      let urlStr = trimmed;
+      if (!/^https?:\/\//i.test(urlStr)) {
+        urlStr = `https://${urlStr}`;
+      }
+      try {
+        new URL(urlStr);
+        return urlStr;
+      } catch {
+        return '';
+      }
+    }),
   days: z.number().int().min(1).max(60).optional().default(5),
   roleTitle: z.string().optional(),
 });
