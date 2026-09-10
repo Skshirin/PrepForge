@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: prep-forge-api
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build -w packages/shared && npm run build -w packages/server
+    startCommand: npm run start:server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: GOOGLE_CSE_API_KEY
+        sync: false
+      - key: GOOGLE_CSE_CX
+        sync: false

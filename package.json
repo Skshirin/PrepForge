@@ -10,6 +10,10 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces",
+    "dev:server": "npm run dev -w packages/server",
+    "dev:web": "npm run dev -w packages/web",
+    "start:server": "npm run start -w packages/server",
+    "start:web": "npm run start -w packages/web",
     "test": "npm run test --workspaces --if-present",
     "test:server": "npm run test -w packages/server",
     "evaluate": "ts-node -P packages/server/tsconfig.json packages/server/scripts/evaluate.ts"

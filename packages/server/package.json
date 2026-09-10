@@ -4,6 +4,7 @@
   "private": true,
   "main": "dist/index.js",
   "scripts": {
+    "prebuild": "npm run build --prefix ../shared",
     "build": "tsc",
     "clean": "rimraf dist",
     "dev": "ts-node-dev --respawn src/index.ts",
