@@ -4,7 +4,7 @@ services:
     env: node
     plan: free
     nodeVersion: 20.18.0
-    buildCommand: npm install && npm run build -w packages/shared && npm run build -w packages/server
+    buildCommand: npm install --include=dev && npm run build -w packages/shared && npm run build -w packages/server
     startCommand: npm run start:server
     healthCheckPath: /api/health
     envVars:
