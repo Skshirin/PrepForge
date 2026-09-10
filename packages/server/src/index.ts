@@ -17,6 +17,9 @@ dotenv.config();
 
 export const app = express();
 
+// Trust reverse proxy (Render, Railway, Heroku load balancers)
+app.set('trust proxy', 1);
+
 // ---- Configuration ---------------------------------------------------------
 
 const PORT = parseInt(process.env.PORT || '5000', 10);
@@ -34,8 +37,9 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (mobile apps, curl, server-to-server)
       if (!origin) return callback(null, true);
+      const isVercel = origin.endsWith('.vercel.app') || origin.includes('vercel.app');
       const allowedOrigins = [CLIENT_URL, 'http://localhost:3000', 'http://127.0.0.1:3000'];
-      if (allowedOrigins.includes(origin) || !isProduction) {
+      if (allowedOrigins.includes(origin) || isVercel || !isProduction) {
         return callback(null, true);
       }
       return callback(new Error(`CORS blocked for origin: ${origin}`));
@@ -76,7 +80,7 @@ app.use(
     cookie: {
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? 'strict' : 'lax',
+      sameSite: isProduction ? 'none' : 'lax', // Required for cross-origin cookies between Vercel and Render
       maxAge: 14 * 24 * 60 * 60 * 1000, // 14 days
     },
   })
