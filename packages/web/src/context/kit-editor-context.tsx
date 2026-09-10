@@ -532,7 +532,7 @@ export function KitEditorProvider({
   // Sync document title with dirty dot indicator: • Kit Title
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    const baseTitle = `${state.kit.role?.title || 'Interview Kit'} | Trao`;
+    const baseTitle = `${state.kit.role?.title || 'Interview Kit'} | PrepForge`;
     document.title = state.isDirty ? `• ${baseTitle}` : baseTitle;
   }, [state.isDirty, state.kit.role?.title]);
 

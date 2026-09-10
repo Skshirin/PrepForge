@@ -23,10 +23,10 @@ export function Navbar() {
           className="flex items-center space-x-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-lg p-1"
         >
           <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-md shadow-indigo-500/20">
-            <span className="text-white font-bold text-lg">T</span>
+            <span className="text-white font-bold text-lg">P</span>
           </div>
           <span className="font-semibold text-lg text-white tracking-tight">
-            Trao <span className="text-indigo-400 font-normal">Interview Kit</span>
+            PrepForge <span className="text-indigo-400 font-normal">AI</span>
           </span>
         </Link>
 

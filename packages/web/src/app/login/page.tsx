@@ -62,13 +62,13 @@ function LoginForm() {
         {/* Brand Header */}
         <div className="text-center space-y-2">
           <div className="inline-flex w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 items-center justify-center shadow-lg shadow-indigo-500/25 mb-2">
-            <span className="text-white font-bold text-2xl">T</span>
+            <span className="text-white font-bold text-2xl">P</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
             Welcome back
           </h1>
           <p className="text-sm text-slate-400">
-            Sign in to your Trao account to access your interview kits
+            Sign in to your PrepForge account to access your interview kits
           </p>
         </div>
 
