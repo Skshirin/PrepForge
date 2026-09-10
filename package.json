@@ -1,0 +1,23 @@
+{
+  "name": "trao-ai-interview-kit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI Interview Prep Kit — Trao Full-Stack Engineering Assessment",
+  "workspaces": [
+    "packages/shared",
+    "packages/server",
+    "packages/web"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces --if-present",
+    "test:server": "npm run test -w packages/server",
+    "evaluate": "ts-node -P packages/server/tsconfig.json packages/server/scripts/evaluate.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
