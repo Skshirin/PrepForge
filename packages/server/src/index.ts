@@ -114,6 +114,14 @@ export function requireDatabase(_req: express.Request, res: express.Response, ne
   });
 }
 
+// Rewrite duplicate /api/api prefixes if client configured NEXT_PUBLIC_API_URL with trailing /api
+app.use((req, _res, next) => {
+  if (req.url.startsWith('/api/api')) {
+    req.url = req.url.replace(/^\/api\/api/, '/api');
+  }
+  next();
+});
+
 // ---- API Routes ------------------------------------------------------------
 
 app.use('/api/auth', requireDatabase, authRouter);

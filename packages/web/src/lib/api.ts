@@ -24,13 +24,23 @@ export class ApiError extends Error {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
+export function buildUrl(endpoint: string): string {
+  if (endpoint.startsWith('http')) return endpoint;
+  const cleanBase = (API_BASE_URL || '').replace(/\/+$/, '');
+  let cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+
+  if (cleanBase.endsWith('/api') && cleanEndpoint.startsWith('/api')) {
+    cleanEndpoint = cleanEndpoint.substring(4);
+  }
+
+  return `${cleanBase}${cleanEndpoint}`;
+}
+
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = endpoint.startsWith('http')
-    ? endpoint
-    : `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const url = buildUrl(endpoint);
 
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),

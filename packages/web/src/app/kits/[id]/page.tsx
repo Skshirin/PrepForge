@@ -8,7 +8,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
-import { api } from '@/lib/api';
+import { api, buildUrl } from '@/lib/api';
 import { KitEditorProvider } from '@/context/kit-editor-context';
 import { KitEditorWorkspace } from '@/components/KitEditorWorkspace';
 
@@ -167,7 +167,7 @@ export default function KitDetailPage() {
 
     // Start SSE stream
     try {
-      const sseUrl = `/api/generation/${jobId}/progress`;
+      const sseUrl = buildUrl(`/api/generation/${jobId}/progress`);
       const eventSource = new EventSource(sseUrl, { withCredentials: true });
       sseRef.current = eventSource;
 
