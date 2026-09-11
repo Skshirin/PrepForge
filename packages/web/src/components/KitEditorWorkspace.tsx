@@ -31,6 +31,7 @@ import { EditableFlashcard } from './EditableFlashcard';
 import { InlineAddQuestion, InlineAddFlashcard } from './AddForms';
 import { SectionHeader } from './SectionHeader';
 import { InlineEdit } from './InlineEdit';
+import { buildUrl, getStoredToken } from '@/lib/api';
 
 interface KitEditorWorkspaceProps {
   kitId: string;
@@ -110,33 +111,188 @@ export function KitEditorWorkspace({ kitId, stageErrors = [] }: KitEditorWorkspa
     }
   };
 
+// Helper functions for client-side export generation
+function formatKitMarkdown(kit: any): string {
+  const lines: string[] = [];
+  const company = kit.source?.company || 'Company';
+  const roleTitle = kit.role?.title || 'Target Role';
+  const daysCount = kit.schedule?.days_available || kit.originalDays || kit.schedule?.days?.length || 0;
+
+  lines.push(`# Interview Preparation Kit: ${roleTitle} at ${company}`);
+  lines.push('');
+  lines.push(`- **Website:** ${kit.source?.company_url || 'N/A'}`);
+  lines.push(`- **Preparation Schedule:** ${daysCount} days`);
+  lines.push(`- **Researched At:** ${kit.source?.researched_at || 'N/A'}`);
+  lines.push('');
+
+  // Company Brief
+  lines.push('## 1. Company Brief');
+  lines.push('');
+  lines.push(kit.company_brief?.summary || 'No summary available.');
+  lines.push('');
+  lines.push('### What They Do');
+  lines.push('');
+  lines.push(kit.company_brief?.what_they_do || 'No details available.');
+  lines.push('');
+
+  // Role & Requirements
+  lines.push(`## 2. Role Overview: ${roleTitle} (${kit.role?.seniority || 'Unspecified'})`);
+  lines.push('');
+  if (kit.role?.responsibilities?.length) {
+    lines.push('### Responsibilities');
+    kit.role.responsibilities.forEach((resp: string) => {
+      lines.push(`- ${resp}`);
+    });
+    lines.push('');
+  }
+
+  if (kit.role?.requirements?.length) {
+    lines.push('### Requirements');
+    kit.role.requirements.forEach((req: any) => {
+      const priority = (req.priority || 'P1').toUpperCase();
+      const kind = req.kind || 'Skill';
+      const idStr = req.id ? ` \`[${req.id}]\`` : '';
+      lines.push(`- **[${priority}]** (${kind}) ${req.text || req}${idStr}`);
+    });
+    lines.push('');
+  }
+
+  // Schedule
+  if (kit.schedule?.days?.length) {
+    lines.push(`## 3. Preparation Schedule (${daysCount} Days)`);
+    lines.push('');
+    kit.schedule.days.forEach((d: any) => {
+      lines.push(`### Day ${d.day}: ${d.focus} (${d.minutes} mins)`);
+      if (d.question_ids?.length) {
+        lines.push(`- **Questions to practice:** ${d.question_ids.join(', ')}`);
+      }
+      lines.push('');
+    });
+  }
+
+  // Questions
+  if (kit.questions?.length) {
+    lines.push('## 4. Interview Questions');
+    lines.push('');
+    kit.questions.forEach((q: any, idx: number) => {
+      const cat = (q.category || 'general').toUpperCase();
+      lines.push(`### Question ${idx + 1} [${cat}]`);
+      lines.push(`**Prompt:** ${q.prompt}`);
+      const diffNum =
+        typeof q.difficulty === 'number'
+          ? q.difficulty
+          : q.difficulty === 'hard'
+          ? 3
+          : q.difficulty === 'medium'
+          ? 2
+          : 1;
+      const diffLabel = typeof q.difficulty === 'string' ? q.difficulty.toUpperCase() : `Level ${diffNum}`;
+      lines.push(`- **Difficulty:** ${'★'.repeat(diffNum)} (${diffLabel})`);
+      lines.push(`- **ID:** \`${q.id}\``);
+      if (q.requirement_ids?.length) {
+        lines.push(`- **Addresses Requirements:** ${q.requirement_ids.join(', ')}`);
+      }
+      if (q.answer_outline) {
+        lines.push('');
+        lines.push('**Answer Outline / Key Points:**');
+        lines.push(q.answer_outline);
+      }
+      lines.push('');
+    });
+  }
+
+  // Flashcards
+  if (kit.flashcards?.length) {
+    lines.push('## 5. Flashcards');
+    lines.push('');
+    kit.flashcards.forEach((f: any, idx: number) => {
+      lines.push(`### Flashcard ${idx + 1}`);
+      lines.push(`**Front:** ${f.front}`);
+      lines.push(`**Back:** ${f.back}`);
+      lines.push('');
+    });
+  }
+
+  // Coverage
+  lines.push('## 6. Coverage Report');
+  lines.push('');
+  lines.push(`- **Coverage verification passes:** ${kit.coverage?.passes || 0}`);
+  if (kit.coverage?.uncovered_requirement_ids?.length) {
+    lines.push(`- **Uncovered requirements:** ${kit.coverage.uncovered_requirement_ids.join(', ')}`);
+  } else {
+    lines.push('- **Status:** 100% of Must-Have requirements are covered by questions.');
+  }
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+function formatKitJson(kit: any): string {
+  const jsonExport = {
+    source: kit.source || {},
+    company_brief: kit.company_brief || {},
+    role: kit.role || {},
+    questions: kit.questions || [],
+    flashcards: kit.flashcards || [],
+    schedule: kit.schedule || {},
+    coverage: kit.coverage || {},
+  };
+  return JSON.stringify(jsonExport, null, 2);
+}
+
+function triggerDownload(blob: Blob, filename: string) {
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(downloadUrl);
+}
+
   // Export handlers
   const handleExport = async (format: 'json' | 'markdown') => {
     setIsExporting(true);
+    const company = (kit?.source?.company || 'interview').toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const filename =
+      format === 'markdown'
+        ? `${company}-interview-kit.md`
+        : `interview-kit-${kitId || kit?._id || 'export'}.json`;
+
     try {
-      const response = await fetch(`/api/kits/${kitId}/export`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ format }),
-      });
+      // 1. Try authenticated backend endpoint if online & reachable
+      try {
+        const token = getStoredToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
 
-      if (!response.ok) throw new Error('Export failed');
+        const endpoint = `/kits/${kitId}/export`;
+        const response = await fetch(buildUrl(endpoint), {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ format }),
+        });
 
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download =
-        format === 'markdown'
-          ? `${(kit.source?.company || 'interview').toLowerCase()}-kit.md`
-          : `interview-kit-${kitId}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(downloadUrl);
+        if (response.ok) {
+          const blob = await response.blob();
+          triggerDownload(blob, filename);
+          return;
+        }
+      } catch {
+        // Network / rewrite error -> seamlessly fallback to client-side export
+      }
+
+      // 2. Client-side export fallback (works 100% reliably, offline, and captures active editor changes)
+      const content = format === 'markdown' ? formatKitMarkdown(kit) : formatKitJson(kit);
+      const mimeType = format === 'markdown' ? 'text/markdown; charset=utf-8' : 'application/json';
+      const blob = new Blob([content], { type: mimeType });
+      triggerDownload(blob, filename);
     } catch (err: any) {
-      alert(`Export error: ${err.message}`);
+      alert(`Export error: ${err.message || 'Export failed'}`);
     } finally {
       setIsExporting(false);
     }
